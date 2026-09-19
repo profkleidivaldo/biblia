@@ -21,7 +21,7 @@ button{border:0}
 .brand{font-size:17px;font-weight:700;flex:1}
 .header-btn{width:42px;height:42px;border-radius:10px;background:transparent;color:#fff;cursor:pointer;font-size:20px}
 .header-btn:hover{background:rgba(255,255,255,.1)}
-.container{max-width:1080px;margin:auto;padding:16px 12px 42px}
+.container{max-width:1280px;margin:auto;padding:10px 10px 30px}
 .view{display:none}.view.active{display:block}
 .topbar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .back{width:42px;height:42px;border-radius:12px;background:#fff;border:1px solid var(--line);cursor:pointer;color:#35424c;font-size:22px}
@@ -31,16 +31,11 @@ button{border:0}
 .search-wrap input{width:100%;height:50px;padding:0 46px 0 16px;border:1px solid var(--line);border-radius:15px;background:#fff;color:var(--ink);outline:none;box-shadow:var(--shadow)}
 .search-wrap input:focus{border-color:#8fd6ea;box-shadow:0 0 0 3px var(--accent-soft)}
 .search-icon{position:absolute;right:12px;top:4px;width:42px;height:42px;background:transparent;color:#6e7982;font-size:20px;pointer-events:none}
-.search-info{font-size:12px;color:var(--muted);margin:-8px 0 15px}
-.section{margin:20px 0 10px}
-.section-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
-.section-dot{width:9px;height:9px;border-radius:50%}
-.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#5d6870;font-weight:800;margin:0}
-.section-count{font-size:11px;color:var(--muted);margin-left:auto}
-.book-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:#273038;border:1px solid #273038;border-radius:5px;overflow:hidden;box-shadow:var(--shadow)}
-.book{min-height:108px;padding:15px 14px 11px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;cursor:pointer}
-.book .abbr{font-size:35px;font-weight:700;line-height:1}
-.book .name{font-size:12px;font-weight:700;align-self:flex-end}
+.search-info{font-size:12px;color:var(--muted);margin:-8px 0 10px}.search-mode{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px}.search-mode button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:700;color:#52606a;cursor:pointer}.search-mode button.active{background:#252525;color:#fff;border-color:#252525}.global-status{font-size:12px;color:var(--muted);margin:6px 0 10px}.result-actions{display:flex;gap:6px;margin-top:8px}.result-actions button{border:1px solid var(--line);background:#f5f7f8;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer}.result-actions button:hover{background:#eaf7fb}
+.book-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;background:#273038;border:1px solid #273038;border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
+.book{min-height:92px;padding:11px 11px 9px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;cursor:pointer}
+.book .abbr{font-size:29px;font-weight:700;line-height:1}
+.book .name{font-size:11px;font-weight:700;align-self:flex-end}
 .book:hover{filter:brightness(1.05)}
 .book[data-section="pentateuco"]{background:#099ed0}
 .book[data-section="historicos"]{background:#83b600}
@@ -90,14 +85,8 @@ button{border:0}
 .menu-panel h3{margin:0 0 15px}
 .menu-panel button{display:block;width:100%;text-align:left;padding:12px;border-radius:10px;background:#f2f4f5;margin:7px 0;cursor:pointer}
 .cache-list{font-size:12px;color:var(--muted);margin-top:18px}
-@media(min-width:650px){
-  .book-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .book{min-height:125px}
-  .book .abbr{font-size:39px}
-}
-@media(min-width:950px){
-  .book-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
-}
+@media(min-width:650px){.book-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.book{min-height:96px}.book .abbr{font-size:31px}}
+@media(min-width:950px){.book-grid{grid-template-columns:repeat(9,minmax(0,1fr))}.book{min-height:88px}}
 @media(max-width:480px){
   .container{padding:12px 9px 35px}
   .title{font-size:21px}
@@ -127,8 +116,12 @@ button{border:0}
     </div>
 
     <div class="search-wrap">
-      <input id="searchInput" type="search" placeholder="Buscar livro, capítulo ou palavra..." autocomplete="off" aria-label="Buscar na Bíblia">
+      <input id="searchInput" type="search" placeholder="Buscar livro, referência ou palavra em toda a Bíblia..." autocomplete="off" aria-label="Buscar na Bíblia">
       <div class="search-icon">⌕</div>
+    </div>
+    <div class="search-mode" id="searchMode">
+      <button type="button" data-mode="global" class="active">Bíblia inteira</button>
+      <button type="button" data-mode="local">Capítulos salvos</button>
     </div>
     <div id="searchInfo" class="search-info"></div>
     <div id="searchResults" class="search-results"></div>
@@ -184,7 +177,7 @@ button{border:0}
     <button id="closeMenu" type="button" style="float:right;width:auto;padding:7px 11px">×</button>
     <h3>Leitura</h3>
     <button id="clearHighlights" type="button">Limpar destaques deste capítulo</button>
-    <button id="clearCache" type="button">Limpar textos salvos</button>
+    <button id="clearCache" type="button">Limpar textos salvos</button><button id="showSermon" type="button">Ver versículos salvos para sermão</button>
     <div class="cache-list" id="cacheInfo"></div>
   </aside>
 </div>
@@ -229,30 +222,20 @@ function showView(id){
 
 function renderBooks(filter=""){
   const term=filter.trim().toLocaleLowerCase("pt-BR");
-  const grouped={};
+  const grid=document.createElement("div");grid.className="book-grid";
   BOOKS.forEach((b,i)=>{
     const matches=!term || b[0].toLocaleLowerCase("pt-BR").includes(term) || b[1].toLocaleLowerCase("pt-BR").includes(term);
-    if(matches)(grouped[b[3]]??=[]).push([b,i]);
+    if(!matches)return;
+    const btn=document.createElement("button");
+    btn.type="button";btn.className="book";btn.dataset.section=b[3];
+    btn.innerHTML=`<span class="abbr">${b[0]}</span><span class="name">${b[1]}</span>`;
+    btn.addEventListener("click",()=>openChapters(i));
+    grid.appendChild(btn);
   });
   bookSections.innerHTML="";
-  Object.keys(SECTION_NAMES).forEach(section=>{
-    if(!grouped[section]?.length)return;
-    const wrapper=document.createElement("section");
-    wrapper.className="section";
-    wrapper.innerHTML=`<div class="section-head"><span class="section-dot" style="background:var(--accent)"></span><h2 class="section-title">${SECTION_NAMES[section]}</h2><span class="section-count">${grouped[section].length}</span></div>`;
-    const grid=document.createElement("div");grid.className="book-grid";
-    grouped[section].forEach(([b,i])=>{
-      const btn=document.createElement("button");
-      btn.type="button";btn.className="book";btn.dataset.section=b[3];
-      btn.innerHTML=`<span class="abbr">${b[0]}</span><span class="name">${b[1]}</span>`;
-      btn.addEventListener("click",()=>openChapters(i));
-      grid.appendChild(btn);
-    });
-    wrapper.appendChild(grid);bookSections.appendChild(wrapper);
-  });
-  if(!bookSections.children.length)bookSections.innerHTML='<div class="empty">Nenhum livro encontrado.</div>';
+  if(grid.children.length)bookSections.appendChild(grid);
+  else bookSections.innerHTML='<div class="empty">Nenhum livro encontrado.</div>';
 }
-
 function openChapters(index){
   selectedBook=BOOKS[index];
   $("chaptersTitle").textContent=selectedBook[1];
@@ -358,35 +341,100 @@ function changeChapter(delta){
 
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
 
+let searchMode="global", searchTimer=null, searchController=null;
+
+// A leitura continua usando a API atual (bible-api.com). Ela não oferece uma busca
+// textual global documentada; por isso a busca global é preparada para um índice
+// remoto, sem baixar nem armazenar a Bíblia inteira no navegador.
+// Para ativá-la, informe um endpoint que receba ?q=PALAVRA e devolva:
+// {"verses":[{"book_name":"João","chapter":3,"verse_number":16,"text":"..."}]}
+const GLOBAL_SEARCH_ENDPOINT="";
+const GLOBAL_SEARCH_API_KEY="";
+
 function searchBible(term){
-  const q=term.trim().toLocaleLowerCase("pt-BR");
+  clearTimeout(searchTimer);
+  if(searchController)searchController.abort();
+  const q=term.trim();
   const results=$("searchResults"),info=$("searchInfo");
   if(!q){results.innerHTML="";info.textContent="";renderBooks("");return;}
   renderBooks(q);
-  const cache=getCache(),found=[];
-  Object.entries(cache).forEach(([key,data])=>{
-    (data.verses||[]).forEach(v=>{
-      const text=(v.text||"").trim();
-      if(text.toLocaleLowerCase("pt-BR").includes(q))found.push({key,verse:v.verse,text});
-    });
-  });
+  if(searchMode==="local")return searchLocal(q);
+  searchTimer=setTimeout(()=>runGlobalSearch(q),420);
+}
+
+function searchLocal(q){
+  const results=$("searchResults"),info=$("searchInfo"),cache=getCache(),found=[];
+  const nq=q.toLocaleLowerCase("pt-BR");
+  Object.entries(cache).forEach(([key,data])=>(data.verses||[]).forEach(v=>{
+    const text=(v.text||"").trim();
+    if(text.toLocaleLowerCase("pt-BR").includes(nq))found.push({key,verse:v.verse,text});
+  }));
   results.innerHTML="";
-  if(found.length){
-    const title=document.createElement("div");title.className="search-info";title.textContent=`${found.length} ocorrência(s) nos capítulos salvos`;
-    results.appendChild(title);
-    found.slice(0,60).forEach(r=>{
-      const item=document.createElement("button");item.type="button";item.className="result";
-      item.innerHTML=`<strong>${escapeHtml(r.key)}:${escapeHtml(r.verse)}</strong><span>${highlightQuery(escapeHtml(r.text),q)}</span>`;
-      item.addEventListener("click",()=>openCachedResult(r.key,r.verse));
-      results.appendChild(item);
-    });
-  }else{
-    info.textContent="A busca por palavra consulta os textos já salvos neste dispositivo. Leia novos capítulos para ampliar o índice sem deixar o aplicativo pesado.";
-    if(navigator.onLine===false)results.innerHTML='<div class="empty">Sem internet: a pesquisa está limitada aos capítulos salvos.</div>';
-    else results.innerHTML='<div class="empty">Nenhuma ocorrência nos capítulos salvos ainda.</div>';
+  info.textContent=found.length?`${found.length} ocorrência(s) nos capítulos salvos`:`Nenhuma ocorrência nos capítulos salvos.`;
+  found.slice(0,80).forEach(r=>addSearchResult({book_name:r.key.replace(/\s+\d+$/,""),chapter:Number(r.key.match(/(\d+)$/)?.[1]),verse_number:r.verse,text:r.text},q));
+}
+
+async function runGlobalSearch(q){
+  const results=$("searchResults"),info=$("searchInfo");
+  results.innerHTML='<div class="loading">Pesquisando na Bíblia inteira…</div>';
+  info.textContent="";
+  if(!GLOBAL_SEARCH_ENDPOINT){
+    info.textContent="Busca global pronta para índice remoto; a leitura continua usando a API atual.\n";
+    results.innerHTML=`<div class="empty"><strong>A busca global precisa de um índice de pesquisa remoto.</strong><br><br>\n      A API atual (<code>bible-api.com</code>) fornece capítulos e versículos, mas não possui um endpoint documentado de busca por palavra em toda a Bíblia.\n      Para não baixar a Bíblia inteira nem sobrecarregar a API, esta versão não faz centenas de requisições automáticas.\n      <br><br>O modo <strong>Capítulos salvos</strong> continua funcionando sem configuração.</div>`;
+    return;
+  }
+  searchController=new AbortController();
+  try{
+    const url=new URL(GLOBAL_SEARCH_ENDPOINT);
+    url.searchParams.set("q",q);
+    const headers={"Accept":"application/json"};
+    if(GLOBAL_SEARCH_API_KEY)headers.Authorization="Bearer "+GLOBAL_SEARCH_API_KEY;
+    const res=await fetch(url,{headers,signal:searchController.signal});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    const data=await res.json();
+    const list=Array.isArray(data)?data:(data.verses||data.results||[]);
+    results.innerHTML="";
+    info.textContent=`${list.length} resultado(s) encontrados na busca global`;
+    if(!list.length){results.innerHTML='<div class="empty">Nenhum resultado encontrado.</div>';return;}
+    list.slice(0,100).forEach(r=>addSearchResult(r,q));
+  }catch(err){
+    if(err.name==="AbortError")return;
+    results.innerHTML='<div class="error"><strong>Não foi possível realizar a busca global.</strong><br>Verifique o endpoint de pesquisa e a conexão.</div>';
   }
 }
 
+function addSearchResult(r,q){
+  const bookName=r.book_name||r.book||r.name||"Livro";
+  const chapter=Number(r.chapter||r.chapter_id||1);
+  const verse=Number(r.verse_number||r.verse||r.verse_id||1);
+  const text=String(r.text||r.content||"").trim();
+  const item=document.createElement("div");item.className="result";
+  item.innerHTML=`<strong>${escapeHtml(bookName)} ${chapter}:${verse}</strong><span>${highlightQuery(escapeHtml(text),q)}</span><div class="result-actions"><button type="button" class="open-result">Abrir capítulo</button><button type="button" class="save-result">Salvar para sermão</button></div>`;
+  item.querySelector(".open-result").addEventListener("click",e=>{e.stopPropagation();openSearchResult(bookName,chapter,verse,q)});
+  item.querySelector(".save-result").addEventListener("click",e=>{e.stopPropagation();saveSermonVerse(bookName,chapter,verse,text)});
+  item.addEventListener("click",()=>openSearchResult(bookName,chapter,verse,q));
+  $("searchResults").appendChild(item);
+}
+
+function openSearchResult(bookName,chapter,verseNo,q){
+  const book=BOOKS.find(b=>b[1].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR") || b[0].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR"));
+  if(!book)return;
+  selectedBook=book;openChapter(chapter);
+  setTimeout(()=>{
+    const v=verses.querySelector(`.verse[data-verse="${CSS.escape(String(verseNo))}"]`);
+    if(v){v.scrollIntoView({behavior:"smooth",block:"center"});
+      v.style.boxShadow="inset 4px 0 0 var(--accent)";
+      setTimeout(()=>v.style.boxShadow="",2200);
+    }
+  },450);
+}
+
+function saveSermonVerse(book,chapter,verse,text){
+  const key="biblia_sermao_v1", data=safeRead(key,{theme:"",verses:[]});
+  if(!data.verses.some(v=>v.book===book&&v.chapter===chapter&&v.verse===verse))data.verses.push({book,chapter,verse,text});
+  save(key,data);
+  alert(`${book} ${chapter}:${verse} foi salvo na coleção do sermão.`);
+}
 function highlightQuery(text,q){
   const safe=q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
   return text.replace(new RegExp("("+safe+")","ig"),"<mark>$1</mark>");
@@ -444,6 +492,15 @@ verses.addEventListener("click",e=>{
 });
 
 $("searchInput").addEventListener("input",e=>searchBible(e.target.value));
+document.querySelectorAll("#searchMode button").forEach(btn=>btn.addEventListener("click",()=>{
+  searchMode=btn.dataset.mode;
+  document.querySelectorAll("#searchMode button").forEach(b=>b.classList.toggle("active",b===btn));
+  searchBible($("searchInput").value);
+}));
+$("showSermon").addEventListener("click",()=>{
+  const data=safeRead("biblia_sermao_v1",{theme:"",verses:[]});
+  alert(data.verses.length?data.verses.map((v,i)=>`${i+1}. ${v.book} ${v.chapter}:${v.verse} — ${v.text}`).join("\n\n"):"Nenhum versículo salvo para o sermão.");
+});
 $("backBooks").addEventListener("click",()=>showView("booksView"));
 $("backChapters").addEventListener("click",()=>openChapters(BOOKS.indexOf(selectedBook)));
 $("homeBtn").addEventListener("click",()=>showView("booksView"));
