@@ -341,115 +341,54 @@ function changeChapter(delta){
 
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
 
-let searchMode="global", searchTimer=null, searchController=null;
-
-// A leitura continua usando a API atual (bible-api.com). Ela não oferece uma busca
-// textual global documentada; por isso a busca global é preparada para um índice
-// remoto, sem baixar nem armazenar a Bíblia inteira no navegador.
-// Para ativá-la, informe um endpoint que receba ?q=PALAVRA e devolva:
-// {"verses":[{"book_name":"João","chapter":3,"verse_number":16,"text":"..."}]}
-const GLOBAL_SEARCH_ENDPOINT="";
-const GLOBAL_SEARCH_API_KEY="";
-
+let searchMode="global", searchTimer=null;
+const GLOBAL_BIBLE_URL="https://raw.githubusercontent.com/thiagobodruk/biblia/master/json/acf.json";
+let globalBible=null, globalBiblePromise=null;
+function loadGlobalBible(){
+  if(globalBible)return Promise.resolve(globalBible);
+  if(globalBiblePromise)return globalBiblePromise;
+  globalBiblePromise=fetch(GLOBAL_BIBLE_URL,{cache:"force-cache"}).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}).then(data=>{globalBible=data;return data;}).catch(e=>{globalBiblePromise=null;throw e;});
+  return globalBiblePromise;
+}
+function normalizeText(s){return String(s||"").toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
 function searchBible(term){
   clearTimeout(searchTimer);
-  if(searchController)searchController.abort();
-  const q=term.trim();
-  const results=$("searchResults"),info=$("searchInfo");
+  const q=term.trim(),results=$("searchResults"),info=$("searchInfo");
   if(!q){results.innerHTML="";info.textContent="";renderBooks("");return;}
   renderBooks(q);
   if(searchMode==="local")return searchLocal(q);
-  searchTimer=setTimeout(()=>runGlobalSearch(q),420);
+  searchTimer=setTimeout(()=>runGlobalSearch(q),300);
 }
-
 function searchLocal(q){
-  const results=$("searchResults"),info=$("searchInfo"),cache=getCache(),found=[];
-  const nq=q.toLocaleLowerCase("pt-BR");
-  Object.entries(cache).forEach(([key,data])=>(data.verses||[]).forEach(v=>{
-    const text=(v.text||"").trim();
-    if(text.toLocaleLowerCase("pt-BR").includes(nq))found.push({key,verse:v.verse,text});
-  }));
-  results.innerHTML="";
-  info.textContent=found.length?`${found.length} ocorrência(s) nos capítulos salvos`:`Nenhuma ocorrência nos capítulos salvos.`;
-  found.slice(0,80).forEach(r=>addSearchResult({book_name:r.key.replace(/\s+\d+$/,""),chapter:Number(r.key.match(/(\d+)$/)?.[1]),verse_number:r.verse,text:r.text},q));
+  const results=$("searchResults"),info=$("searchInfo"),cache=getCache(),found=[],nq=normalizeText(q);
+  Object.entries(cache).forEach(([key,data])=>(data.verses||[]).forEach(v=>{const text=(v.text||"").trim();if(normalizeText(text).includes(nq))found.push({key,verse:v.verse,text});}));
+  results.innerHTML="";info.textContent=found.length?`${found.length} ocorrência(s) nos capítulos salvos`:`Nenhuma ocorrência nos capítulos salvos.`;
+  found.slice(0,100).forEach(r=>addSearchResult({book_name:r.key.replace(/\s+\d+$/,""),chapter:Number(r.key.match(/(\d+)$/)?.[1]),verse_number:r.verse,text:r.text},q));
 }
-
 async function runGlobalSearch(q){
   const results=$("searchResults"),info=$("searchInfo");
-  results.innerHTML='<div class="loading">Pesquisando na Bíblia inteira…</div>';
-  info.textContent="";
-  if(!GLOBAL_SEARCH_ENDPOINT){
-    info.textContent="Busca global pronta para índice remoto; a leitura continua usando a API atual.\n";
-    results.innerHTML=`<div class="empty"><strong>A busca global precisa de um índice de pesquisa remoto.</strong><br><br>\n      A API atual (<code>bible-api.com</code>) fornece capítulos e versículos, mas não possui um endpoint documentado de busca por palavra em toda a Bíblia.\n      Para não baixar a Bíblia inteira nem sobrecarregar a API, esta versão não faz centenas de requisições automáticas.\n      <br><br>O modo <strong>Capítulos salvos</strong> continua funcionando sem configuração.</div>`;
-    return;
-  }
-  searchController=new AbortController();
+  results.innerHTML='<div class="loading">Carregando a Bíblia para a busca global…</div>';info.textContent="";
   try{
-    const url=new URL(GLOBAL_SEARCH_ENDPOINT);
-    url.searchParams.set("q",q);
-    const headers={"Accept":"application/json"};
-    if(GLOBAL_SEARCH_API_KEY)headers.Authorization="Bearer "+GLOBAL_SEARCH_API_KEY;
-    const res=await fetch(url,{headers,signal:searchController.signal});
-    if(!res.ok)throw new Error("HTTP "+res.status);
-    const data=await res.json();
-    const list=Array.isArray(data)?data:(data.verses||data.results||[]);
-    results.innerHTML="";
-    info.textContent=`${list.length} resultado(s) encontrados na busca global`;
-    if(!list.length){results.innerHTML='<div class="empty">Nenhum resultado encontrado.</div>';return;}
-    list.slice(0,100).forEach(r=>addSearchResult(r,q));
-  }catch(err){
-    if(err.name==="AbortError")return;
-    results.innerHTML='<div class="error"><strong>Não foi possível realizar a busca global.</strong><br>Verifique o endpoint de pesquisa e a conexão.</div>';
-  }
+    const data=await loadGlobalBible(),terms=normalizeText(q).split(/\s+/).filter(Boolean),found=[];
+    const books=Array.isArray(data)?data:Object.values(data);
+    books.forEach((book,bi)=>{const name=book.name||book.book||BOOKS[bi]?.[1]||"Livro", chapters=book.chapters||book.verses||[];
+      chapters.forEach((chapter,ci)=>{const vs=Array.isArray(chapter)?chapter:(chapter.verses||[]);vs.forEach((v,vi)=>{const text=typeof v==="string"?v:(v.text||v.verse||v.content||"");const nt=normalizeText(text);if(terms.every(t=>nt.includes(t)))found.push({book_name:name,chapter:ci+1,verse_number:(typeof v==="object"&&v.verse)?v.verse:vi+1,text});});});});
+    results.innerHTML="";info.textContent=`${found.length} resultado(s) encontrados na Bíblia inteira`;
+    if(!found.length){results.innerHTML='<div class="empty">Nenhum versículo encontrado.</div>';return;}
+    found.slice(0,200).forEach(r=>addSearchResult(r,q));
+  }catch(e){results.innerHTML='<div class="error"><strong>Não foi possível carregar a busca global.</strong><br>Verifique sua conexão com a internet e tente novamente.</div>';}
 }
-
 function addSearchResult(r,q){
-  const bookName=r.book_name||r.book||r.name||"Livro";
-  const chapter=Number(r.chapter||r.chapter_id||1);
-  const verse=Number(r.verse_number||r.verse||r.verse_id||1);
-  const text=String(r.text||r.content||"").trim();
+  const bookName=r.book_name||r.book||"Livro",chapter=Number(r.chapter||1),verse=Number(r.verse_number||r.verse||1),text=String(r.text||"").trim();
   const item=document.createElement("div");item.className="result";
   item.innerHTML=`<strong>${escapeHtml(bookName)} ${chapter}:${verse}</strong><span>${highlightQuery(escapeHtml(text),q)}</span><div class="result-actions"><button type="button" class="open-result">Abrir capítulo</button><button type="button" class="save-result">Salvar para sermão</button></div>`;
   item.querySelector(".open-result").addEventListener("click",e=>{e.stopPropagation();openSearchResult(bookName,chapter,verse,q)});
   item.querySelector(".save-result").addEventListener("click",e=>{e.stopPropagation();saveSermonVerse(bookName,chapter,verse,text)});
-  item.addEventListener("click",()=>openSearchResult(bookName,chapter,verse,q));
-  $("searchResults").appendChild(item);
+  item.addEventListener("click",()=>openSearchResult(bookName,chapter,verse,q));$("searchResults").appendChild(item);
 }
-
-function openSearchResult(bookName,chapter,verseNo,q){
-  const book=BOOKS.find(b=>b[1].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR") || b[0].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR"));
-  if(!book)return;
-  selectedBook=book;openChapter(chapter);
-  setTimeout(()=>{
-    const v=verses.querySelector(`.verse[data-verse="${CSS.escape(String(verseNo))}"]`);
-    if(v){v.scrollIntoView({behavior:"smooth",block:"center"});
-      v.style.boxShadow="inset 4px 0 0 var(--accent)";
-      setTimeout(()=>v.style.boxShadow="",2200);
-    }
-  },450);
-}
-
-function saveSermonVerse(book,chapter,verse,text){
-  const key="biblia_sermao_v1", data=safeRead(key,{theme:"",verses:[]});
-  if(!data.verses.some(v=>v.book===book&&v.chapter===chapter&&v.verse===verse))data.verses.push({book,chapter,verse,text});
-  save(key,data);
-  alert(`${book} ${chapter}:${verse} foi salvo na coleção do sermão.`);
-}
-function highlightQuery(text,q){
-  const safe=q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-  return text.replace(new RegExp("("+safe+")","ig"),"<mark>$1</mark>");
-}
-
-function openCachedResult(key,verseNo){
-  const book=BOOKS.find(b=>key.startsWith(b[1]+" "));
-  if(!book)return;
-  const chapter=Number(key.slice(book[1].length).trim());
-  selectedBook=book;openChapter(chapter);
-  setTimeout(()=>{
-    const v=verses.querySelector(`.verse[data-verse="${CSS.escape(String(verseNo))}"]`);
-    if(v)v.scrollIntoView({behavior:"smooth",block:"center"});
-  },80);
-}
+function openSearchResult(bookName,chapter,verseNo){const book=BOOKS.find(b=>b[1].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR")||b[0].toLocaleLowerCase("pt-BR")===String(bookName).toLocaleLowerCase("pt-BR"));if(!book)return;selectedBook=book;openChapter(chapter);setTimeout(()=>{const v=verses.querySelector(`.verse[data-verse="${CSS.escape(String(verseNo))}"]`);if(v){v.scrollIntoView({behavior:"smooth",block:"center"});v.style.boxShadow="inset 4px 0 0 var(--accent)";setTimeout(()=>v.style.boxShadow="",2200);}},450);}
+function saveSermonVerse(book,chapter,verse,text){const key="biblia_sermao_v1",data=safeRead(key,{theme:"",verses:[]});if(!data.verses.some(v=>v.book===book&&v.chapter===chapter&&v.verse===verse))data.verses.push({book,chapter,verse,text});save(key,data);alert(`${book} ${chapter}:${verse} foi salvo na coleção do sermão.`);}
+function highlightQuery(text,q){const terms=q.split(/\s+/).filter(Boolean).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));if(!terms.length)return text;return text.replace(new RegExp("("+terms.join("|")+")","ig"),"<mark>$1</mark>");}
 
 document.addEventListener("selectionchange",()=>{
   const sel=window.getSelection();
