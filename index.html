@@ -163,14 +163,10 @@ button{border:0}
         <button class="action" id="prevChapterBottom" type="button">← Capítulo anterior</button>
         <button class="action" id="nextChapterBottom" type="button">Próximo capítulo →</button>
       </div>
-      <div class="note">Os capítulos já lidos são guardados localmente para leitura sem internet. Os destaques também ficam neste dispositivo.</div>
+      <div class="note">Os capítulos já lidos são guardados localmente para leitura sem internet. Selecione um trecho para destacá-lo automaticamente; selecione o mesmo trecho novamente para remover o destaque. Os destaques ficam neste dispositivo.</div>
     </div>
   </section>
 </main>
-
-<div id="selectionTool" class="selection-tool" aria-label="Ferramenta de seleção">
-  <button id="highlightBtn" type="button">✦ Destacar</button>
-</div>
 
 <div id="readerMenu" class="reader-menu">
   <aside class="menu-panel">
@@ -204,7 +200,7 @@ const MAX_CACHED_CHAPTERS=45;
 
 const $=id=>document.getElementById(id);
 const bookSections=$("bookSections"), chapterGrid=$("chapterGrid"), verses=$("verses");
-let selectedBook=null,selectedChapter=1,selectedRange=null;
+let selectedBook=null,selectedChapter=1;
 
 function safeRead(key,fallback){
   try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback));}catch{return fallback}
@@ -247,7 +243,7 @@ function openChapters(index){
 function openChapter(chapter){
   selectedChapter=chapter;
   $("readerTitle").textContent=`${selectedBook[1]} ${chapter}`;
-  $("readerMeta").textContent="Texto bíblico • selecione um trecho para destacar";
+  $("readerMeta").textContent="Texto bíblico • selecione um trecho para destacar ou remover o destaque";
   verses.innerHTML='<div class="loading">Carregando o texto bíblico…</div>';
   updateNav();
   showView("readerView");
@@ -390,37 +386,90 @@ function openSearchResult(bookName,chapter,verseNo){const book=BOOKS.find(b=>b[1
 function saveSermonVerse(book,chapter,verse,text){const key="biblia_sermao_v1",data=safeRead(key,{theme:"",verses:[]});if(!data.verses.some(v=>v.book===book&&v.chapter===chapter&&v.verse===verse))data.verses.push({book,chapter,verse,text});save(key,data);alert(`${book} ${chapter}:${verse} foi salvo na coleção do sermão.`);}
 function highlightQuery(text,q){const terms=q.split(/\s+/).filter(Boolean).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));if(!terms.length)return text;return text.replace(new RegExp("("+terms.join("|")+")","ig"),"<mark>$1</mark>");}
 
-document.addEventListener("selectionchange",()=>{
+let selectionTimer=null;
+let lastSelectionAction="";
+
+function getVerseFromRange(range){
+  const node=range.commonAncestorContainer;
+  const element=node.nodeType===Node.ELEMENT_NODE?node:node.parentElement;
+  return element?.closest?.(".verse")||null;
+}
+
+function rangeIsInsideSameVerse(range,verse){
+  if(!verse)return false;
+  const startVerse=range.startContainer.nodeType===Node.ELEMENT_NODE
+    ?range.startContainer.closest?.(".verse")
+    :range.startContainer.parentElement?.closest?.(".verse");
+  const endVerse=range.endContainer.nodeType===Node.ELEMENT_NODE
+    ?range.endContainer.closest?.(".verse")
+    :range.endContainer.parentElement?.closest?.(".verse");
+  return startVerse===verse&&endVerse===verse;
+}
+
+function toggleHighlightFromSelection(){
   const sel=window.getSelection();
-  if(!sel||sel.isCollapsed){$("selectionTool").classList.remove("show");return;}
-  const node=sel.anchorNode;
-  const verse=node?.parentElement?.closest?.(".verse")||node?.parentElement?.parentElement?.closest?.(".verse");
-  if(!verse||!verses.contains(verse)){$("selectionTool").classList.remove("show");return;}
-  const rect=sel.getRangeAt(0).getBoundingClientRect();
-  const tool=$("selectionTool");
-  tool.style.left=Math.max(8,Math.min(window.innerWidth-125,rect.left+rect.width/2-60))+"px";
-  tool.style.top=Math.max(8,rect.top-48)+"px";
-  tool.classList.add("show");
-  selectedRange=sel.getRangeAt(0).cloneRange();
+  if(!sel||sel.rangeCount===0||sel.isCollapsed)return;
+
+  const range=sel.getRangeAt(0);
+  const text=range.toString().trim();
+  if(!text)return;
+
+  const verse=getVerseFromRange(range);
+  if(!verse||!verses.contains(verse)||!rangeIsInsideSameVerse(range,verse))return;
+
+  // Evita que o mesmo evento selectionchange alterne duas vezes.
+  const signature=`${verse.dataset.verse}|${text}|${range.startOffset}|${range.endOffset}`;
+  if(signature===lastSelectionAction)return;
+  lastSelectionAction=signature;
+
+  try{
+    // Se a seleção corresponde a um destaque existente, remove o destaque.
+    const marks=[...verse.querySelectorAll("mark.highlight")];
+    const existing=marks.find(mark=>mark.textContent.trim()===text);
+
+    if(existing){
+      existing.replaceWith(...existing.childNodes);
+      storeCurrentMarks();
+      sel.removeAllRanges();
+      return;
+    }
+
+    // Cria o destaque imediatamente, sem botão de confirmação.
+    const mark=document.createElement("mark");
+    mark.className="highlight";
+    const fragment=range.extractContents();
+    mark.appendChild(fragment);
+    range.insertNode(mark);
+
+    storeCurrentMarks();
+    sel.removeAllRanges();
+  }catch{
+    // A seleção precisa estar contida em um único versículo.
+    sel.removeAllRanges();
+  }
+}
+
+document.addEventListener("selectionchange",()=>{
+  clearTimeout(selectionTimer);
+  const sel=window.getSelection();
+
+  if(!sel||sel.isCollapsed){
+    lastSelectionAction="";
+    return;
+  }
+
+  // Aguarda a seleção terminar para não reagir várias vezes enquanto
+  // o usuário ainda está arrastando o mouse/dedo.
+  selectionTimer=setTimeout(toggleHighlightFromSelection,120);
 });
 
-$("highlightBtn").addEventListener("click",()=>{
-  if(!selectedRange)return;
-  const ancestor=selectedRange.commonAncestorContainer.nodeType===1?selectedRange.commonAncestorContainer:selectedRange.commonAncestorContainer.parentElement;
-  const verse=ancestor.closest?.(".verse");
-  if(!verse||!verses.contains(verse)){return;}
-  if(selectedRange.toString().trim().length===0)return;
-  try{
-    const mark=document.createElement("mark");mark.className="highlight";
-    const frag=selectedRange.extractContents();mark.appendChild(frag);selectedRange.insertNode(mark);
-    storeCurrentMarks();
-    window.getSelection().removeAllRanges();
-  }catch{
-    alert("Selecione um trecho dentro de um único versículo.");
-  }
-  $("selectionTool").classList.remove("show");
-  selectedRange=null;
+document.addEventListener("mousedown",()=>{
+  lastSelectionAction="";
 });
+
+document.addEventListener("touchstart",()=>{
+  lastSelectionAction="";
+},{passive:true});
 
 verses.addEventListener("click",e=>{
   const mark=e.target.closest("mark.highlight");
