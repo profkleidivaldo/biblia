@@ -75,10 +75,13 @@ button{border:0}
 .chapter-nav{display:flex;justify-content:space-between;gap:8px;padding-top:12px}
 .chapter-nav .action{flex:1}
 .note{font-size:11px;color:var(--muted);margin-top:12px}
-.selection-tool{position:fixed;z-index:120;display:none;background:#222;color:#fff;border-radius:11px;padding:4px;box-shadow:0 7px 24px rgba(0,0,0,.25)}
-.selection-tool.show{display:flex;gap:3px}
-.selection-tool button{background:transparent;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap}
-.selection-tool button:hover{background:rgba(255,255,255,.12)}
+.selection-tool{position:fixed;left:0;right:0;bottom:0;z-index:120;display:none;justify-content:center;align-items:center;gap:8px;
+  background:#222;color:#fff;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 20px rgba(0,0,0,.25)}
+.selection-tool.show{display:flex}
+.selection-tool .sel-preview{flex:1;min-width:0;font-size:12px;color:#c7ccd1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%}
+.selection-tool button{background:rgba(255,255,255,.12);color:#fff;padding:10px 14px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap}
+.selection-tool button:hover{background:rgba(255,255,255,.22)}
+.selection-tool #selToggleBtn{background:var(--accent)}
 .reader-menu{position:fixed;inset:0;background:rgba(10,18,25,.48);z-index:110;display:none}
 .reader-menu.show{display:block}
 .menu-panel{position:absolute;right:0;top:0;height:100%;width:min(330px,88%);background:#fff;padding:18px;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
@@ -179,8 +182,9 @@ button{border:0}
 </div>
 
 <div id="selectionTool" class="selection-tool" role="toolbar" aria-label="Ações de destaque">
-  <button type="button" id="selToggleBtn">Destacar</button>
+  <span class="sel-preview" id="selPreview"></span>
   <button type="button" id="selCancelBtn">Cancelar</button>
+  <button type="button" id="selToggleBtn">Destacar</button>
 </div>
 
 <script>
@@ -393,7 +397,7 @@ function highlightQuery(text,q){const terms=q.split(/\s+/).filter(Boolean).map(x
 
 /* ---------- Seleção e destaque de texto (compatível com o menu nativo do navegador/celular) ---------- */
 
-const selectionTool=$("selectionTool"), selToggleBtn=$("selToggleBtn"), selCancelBtn=$("selCancelBtn");
+const selectionTool=$("selectionTool"), selToggleBtn=$("selToggleBtn"), selCancelBtn=$("selCancelBtn"), selPreview=$("selPreview");
 let selectionTimer=null;
 let pendingRange=null, pendingVerse=null, pendingText="";
 
@@ -417,17 +421,6 @@ function rangeIsInsideSameVerse(range,verse){
 function hideSelectionTool(){
   selectionTool.classList.remove("show");
   pendingRange=null;pendingVerse=null;pendingText="";
-}
-
-function positionSelectionTool(rect){
-  // Garante que o botão fique visível mesmo perto das bordas da tela.
-  const toolWidth=selectionTool.offsetWidth||160;
-  let left=rect.left+rect.width/2-toolWidth/2;
-  left=Math.max(8,Math.min(left,window.innerWidth-toolWidth-8));
-  let top=rect.top-52;
-  if(top<8)top=rect.bottom+10; // se não couber acima, mostra abaixo da seleção
-  selectionTool.style.left=left+"px";
-  selectionTool.style.top=top+"px";
 }
 
 // Só avalia a seleção depois que o usuário parou de mexer (evita reagir
@@ -454,10 +447,9 @@ function evaluateSelection(){
 
   const alreadyHighlighted=[...verse.querySelectorAll("mark.highlight")].some(m=>m.textContent.trim()===text);
   selToggleBtn.textContent=alreadyHighlighted?"Remover destaque":"Destacar";
+  selPreview.textContent="\u201C"+(text.length>60?text.slice(0,60)+"…":text)+"\u201D";
 
-  const rect=range.getBoundingClientRect();
   selectionTool.classList.add("show");
-  positionSelectionTool(rect);
 }
 
 function applyPendingHighlight(){
