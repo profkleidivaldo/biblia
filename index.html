@@ -111,6 +111,9 @@ button{border:0}
 
 <main class="container">
   <section id="booksView" class="view active">
+    <div id="storageWarning" class="error" style="display:none">
+      <strong>Atenção:</strong> este navegador não está permitindo salvar dados neste dispositivo. Os destaques e os capítulos salvos para leitura offline <u>não vão persistir</u> depois de fechar ou recarregar a página. Isso costuma acontecer quando o arquivo é aberto direto do disco (sem estar hospedado em um site) ou dentro do preview de outro aplicativo (e-mail, WhatsApp, Arquivos). Veja a explicação abaixo do app.
+    </div>
     <div class="topbar">
       <div>
         <h1 class="title">Livros da Bíblia</h1>
@@ -166,7 +169,7 @@ button{border:0}
         <button class="action" id="prevChapterBottom" type="button">← Capítulo anterior</button>
         <button class="action" id="nextChapterBottom" type="button">Próximo capítulo →</button>
       </div>
-      <div class="note">Os capítulos já lidos são guardados localmente para leitura sem internet. Selecione um trecho de texto normalmente (com o dedo ou o mouse) e, quando aparecer o botão flutuante, toque em "Destacar" para marcá-lo — ou em "Remover destaque" para desfazer. Isso não interfere no menu de seleção do navegador (copiar, buscar, etc). Os destaques ficam neste dispositivo.</div>
+      <div class="note">Os capítulos já lidos são guardados localmente para leitura sem internet. Selecione um trecho de texto normalmente (com o dedo ou o mouse) — pode ser dentro de um versículo ou cruzando vários — e, quando aparecer a barra na parte de baixo da tela, toque em "Destacar" para marcá-lo. Para remover um destaque, toque diretamente sobre o trecho já marcado. Isso não interfere no menu de seleção do navegador (copiar, buscar, etc). Os destaques ficam neste dispositivo.</div>
     </div>
   </section>
 </main>
@@ -211,10 +214,39 @@ const $=id=>document.getElementById(id);
 const bookSections=$("bookSections"), chapterGrid=$("chapterGrid"), verses=$("verses");
 let selectedBook=null,selectedChapter=1;
 
+let storageAvailable=null;
+function checkStorageAvailable(){
+  if(storageAvailable!==null)return storageAvailable;
+  try{
+    const testKey="__biblia_storage_test__";
+    localStorage.setItem(testKey,"1");
+    const ok=localStorage.getItem(testKey)==="1";
+    localStorage.removeItem(testKey);
+    storageAvailable=ok;
+  }catch{
+    storageAvailable=false;
+  }
+  if(!storageAvailable){
+    const banner=$("storageWarning");
+    if(banner)banner.style.display="block";
+  }
+  return storageAvailable;
+}
 function safeRead(key,fallback){
   try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback));}catch{return fallback}
 }
-function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
+function save(key,value){
+  try{
+    localStorage.setItem(key,JSON.stringify(value));
+    // Confere se realmente gravou — alguns navegadores aceitam a chamada
+    // sem erro mas não persistem nada (ex.: abas anônimas em certos modos).
+    if(localStorage.getItem(key)===null)checkStorageAvailable();
+  }catch{
+    storageAvailable=false;
+    const banner=$("storageWarning");
+    if(banner)banner.style.display="block";
+  }
+}
 function getCache(){return safeRead(STORAGE_CACHE,{});}
 function getMarks(){return safeRead(STORAGE_MARKS,{});}
 function cacheKey(book,chapter){return book[1]+" "+chapter;}
@@ -399,28 +431,66 @@ function highlightQuery(text,q){const terms=q.split(/\s+/).filter(Boolean).map(x
 
 const selectionTool=$("selectionTool"), selToggleBtn=$("selToggleBtn"), selCancelBtn=$("selCancelBtn"), selPreview=$("selPreview");
 let selectionTimer=null;
-let pendingRange=null, pendingVerse=null, pendingText="";
+let pendingSubRanges=null; // [{verseEl, subRange}, ...]
 
-function getVerseFromRange(range){
-  const node=range.commonAncestorContainer;
-  const element=node.nodeType===Node.ELEMENT_NODE?node:node.parentElement;
-  return element?.closest?.(".verse")||null;
+function getVerseElements(){
+  return [...verses.querySelectorAll(".verse")];
 }
 
-function rangeIsInsideSameVerse(range,verse){
-  if(!verse)return false;
-  const startVerse=range.startContainer.nodeType===Node.ELEMENT_NODE
-    ?range.startContainer.closest?.(".verse")
-    :range.startContainer.parentElement?.closest?.(".verse");
-  const endVerse=range.endContainer.nodeType===Node.ELEMENT_NODE
-    ?range.endContainer.closest?.(".verse")
-    :range.endContainer.parentElement?.closest?.(".verse");
-  return startVerse===verse&&endVerse===verse;
+// Descobre quais elementos .verse a seleção toca (mesmo que ela cruze vários).
+function getIntersectingVerses(range){
+  return getVerseElements().filter(v=>{
+    try{return range.intersectsNode?range.intersectsNode(v):rangeIntersectsNodeFallback(range,v);}
+    catch{return false;}
+  });
+}
+function rangeIntersectsNodeFallback(range,node){
+  const nodeRange=document.createRange();
+  nodeRange.selectNode(node);
+  return range.compareBoundaryPoints(Range.END_TO_START,nodeRange)<0 && range.compareBoundaryPoints(Range.START_TO_END,nodeRange)>0;
+}
+
+// Recorta a seleção original para a parte que cabe dentro de um único
+// versículo, sempre pulando o número do versículo (a tag <b>).
+function buildVerseSubRange(range,verseEl,isFirst,isLast){
+  const bTag=verseEl.querySelector(":scope > b");
+  const bIndex=bTag?Array.prototype.indexOf.call(verseEl.childNodes,bTag):-1;
+  const contentStartOffset=bIndex>=0?bIndex+1:0;
+
+  let startNode=verseEl,startOffset=contentStartOffset;
+  if(isFirst&&verseEl.contains(range.startContainer)){
+    const insideNumber=bTag&&(range.startContainer===bTag||bTag.contains(range.startContainer));
+    if(!insideNumber){startNode=range.startContainer;startOffset=range.startOffset;}
+  }
+
+  let endNode=verseEl,endOffset=verseEl.childNodes.length;
+  if(isLast&&verseEl.contains(range.endContainer)){
+    endNode=range.endContainer;endOffset=range.endOffset;
+  }
+
+  const subRange=document.createRange();
+  try{
+    subRange.setStart(startNode,startOffset);
+    subRange.setEnd(endNode,endOffset);
+  }catch{return null;}
+  return subRange.collapsed?null:subRange;
+}
+
+function computePendingSubRanges(range){
+  const intersecting=getIntersectingVerses(range);
+  if(!intersecting.length)return null;
+  const first=intersecting[0],last=intersecting[intersecting.length-1];
+  const result=[];
+  intersecting.forEach(verseEl=>{
+    const subRange=buildVerseSubRange(range,verseEl,verseEl===first,verseEl===last);
+    if(subRange&&subRange.toString().trim())result.push({verseEl,subRange});
+  });
+  return result.length?result:null;
 }
 
 function hideSelectionTool(){
   selectionTool.classList.remove("show");
-  pendingRange=null;pendingVerse=null;pendingText="";
+  pendingSubRanges=null;
 }
 
 // Só avalia a seleção depois que o usuário parou de mexer (evita reagir
@@ -430,50 +500,72 @@ function evaluateSelection(){
   if(!sel||sel.rangeCount===0||sel.isCollapsed){hideSelectionTool();return;}
 
   const range=sel.getRangeAt(0);
-  const text=range.toString().trim();
-  if(!text){hideSelectionTool();return;}
+  if(!range.toString().trim()){hideSelectionTool();return;}
 
-  const verse=getVerseFromRange(range);
-  if(!verse||!verses.contains(verse)||!rangeIsInsideSameVerse(range,verse)){
-    // Seleção fora de um versículo ou cruzando mais de um: não mostra o botão,
-    // mas também não mexe na seleção nativa (deixa o menu do navegador funcionar).
-    hideSelectionTool();
-    return;
+  // A seleção precisa tocar o texto bíblico (pode cruzar vários versículos).
+  const commonNode=range.commonAncestorContainer;
+  const commonEl=commonNode.nodeType===Node.ELEMENT_NODE?commonNode:commonNode.parentElement;
+  if(!commonEl||!verses.contains(commonEl)&&commonEl!==verses){hideSelectionTool();return;}
+
+  const subRanges=computePendingSubRanges(range);
+  if(!subRanges){hideSelectionTool();return;}
+
+  pendingSubRanges=subRanges;
+
+  const firstVerseNo=subRanges[0].verseEl.dataset.verse;
+  const lastVerseNo=subRanges[subRanges.length-1].verseEl.dataset.verse;
+  const combinedText=subRanges.map(r=>r.subRange.toString().trim()).join(" ");
+  const previewText=combinedText.length>60?combinedText.slice(0,60)+"…":combinedText;
+
+  if(subRanges.length===1){
+    const verseEl=subRanges[0].verseEl,text=subRanges[0].subRange.toString().trim();
+    const alreadyHighlighted=[...verseEl.querySelectorAll("mark.highlight")].some(m=>m.textContent.trim()===text);
+    selToggleBtn.textContent=alreadyHighlighted?"Remover destaque":"Destacar";
+    selPreview.textContent="\u201C"+previewText+"\u201D";
+  }else{
+    selToggleBtn.textContent="Destacar";
+    selPreview.textContent=`vv. ${firstVerseNo}–${lastVerseNo}: \u201C${previewText}\u201D`;
   }
-
-  pendingRange=range.cloneRange();
-  pendingVerse=verse;
-  pendingText=text;
-
-  const alreadyHighlighted=[...verse.querySelectorAll("mark.highlight")].some(m=>m.textContent.trim()===text);
-  selToggleBtn.textContent=alreadyHighlighted?"Remover destaque":"Destacar";
-  selPreview.textContent="\u201C"+(text.length>60?text.slice(0,60)+"…":text)+"\u201D";
 
   selectionTool.classList.add("show");
 }
 
 function applyPendingHighlight(){
-  if(!pendingRange||!pendingVerse){hideSelectionTool();return;}
-  const verse=pendingVerse, text=pendingText;
-  try{
-    const marks=[...verse.querySelectorAll("mark.highlight")];
-    const existing=marks.find(mark=>mark.textContent.trim()===text);
-    if(existing){
-      existing.replaceWith(...existing.childNodes);
-    }else{
-      const mark=document.createElement("mark");
-      mark.className="highlight";
-      const fragment=pendingRange.extractContents();
-      mark.appendChild(fragment);
-      pendingRange.insertNode(mark);
-    }
-    storeCurrentMarks();
-  }catch{
-    // Se o trecho selecionado cruzar marcações existentes de forma irregular,
-    // ignora silenciosamente em vez de quebrar a leitura.
+  if(!pendingSubRanges||!pendingSubRanges.length){hideSelectionTool();return;}
+
+  // Seleção de um único versículo: mantém o comportamento de alternar
+  // (destacar / remover destaque) quando o trecho já estava marcado.
+  if(pendingSubRanges.length===1){
+    const {verseEl,subRange}=pendingSubRanges[0];
+    const text=subRange.toString().trim();
+    try{
+      const marks=[...verseEl.querySelectorAll("mark.highlight")];
+      const existing=marks.find(mark=>mark.textContent.trim()===text);
+      if(existing){
+        existing.replaceWith(...existing.childNodes);
+      }else{
+        wrapRangeInMark(subRange);
+      }
+    }catch{}
+  }else{
+    // Seleção cruzando vários versículos: marca a parte correspondente
+    // em cada versículo, sempre pulando o número do versículo.
+    pendingSubRanges.forEach(({subRange})=>{
+      try{wrapRangeInMark(subRange);}catch{}
+    });
   }
+
+  storeCurrentMarks();
   window.getSelection()?.removeAllRanges();
   hideSelectionTool();
+}
+
+function wrapRangeInMark(range){
+  const mark=document.createElement("mark");
+  mark.className="highlight";
+  const fragment=range.extractContents();
+  mark.appendChild(fragment);
+  range.insertNode(mark);
 }
 
 // Só reage depois de uma pausa: enquanto o dedo ainda está arrastando as
@@ -552,6 +644,7 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){$("readerMenu").classList.remove("show");hideSelectionTool();}
 });
 
+checkStorageAvailable();
 renderBooks();
 </script>
 </body>
