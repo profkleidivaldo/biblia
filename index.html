@@ -101,6 +101,13 @@ button{border:0}
 </head>
 <body>
 
+<div vw class="enabled">
+  <div vw-access-button class="active"></div>
+  <div vw-plugin-wrapper>
+    <div class="vw-plugin-top-wrapper"></div>
+  </div>
+</div>
+
 <header class="app-header">
   <div class="header-inner">
     <button class="header-btn" id="homeBtn" aria-label="Livros">☰</button>
@@ -646,6 +653,11 @@ document.addEventListener("keydown",e=>{
 
 checkStorageAvailable();
 renderBooks();
+</script>
+
+<script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+<script>
+  new window.VLibras.Widget("https://vlibras.gov.br/app");
 </script>
 </body>
 </html>
